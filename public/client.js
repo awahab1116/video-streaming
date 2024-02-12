@@ -1,54 +1,16 @@
 /**
- * This file contains the client-side JavaScript code for a WebRTC video chat application.
- * It includes DOM element references, variables, socket event callbacks, and utility functions.
- * The code establishes a connection between the local device and a remote peer using WebRTC technology.
- * It allows users to join a room, start a video call, exchange session descriptions and ICE candidates,
- * and display local and remote video streams.
- *
- * @summary   Client-side WebRTC video chat application
- * @requires socket.io
- * @requires RTCPeerConnection
- * @requires RTCSessionDescription
- * @requires RTCIceCandidate
- * @requires navigator.mediaDevices.getUserMedia
+ * Event handler for the 'click' event on the connectButton element.
+ * It joins the specified room and triggers the showVideo function.
  */
-// DOM elements.
-const roomSelectionContainer = document.getElementById('room-selection-container')
-const roomInput = document.getElementById('room-input')
-const connectButton = document.getElementById('connect-button')
-
-const videoChatContainer = document.getElementById('video-chat-container')
-const localVideoComponent = document.getElementById('local-video')
-const remoteVideoComponent = document.getElementById('remote-video')
-
-// Variables.
-const socket = io()
-const mediaConstraints = {
-  audio: true,
-  video: { width: 1280, height: 720 },
-}
-let localStream
-let remoteStream
-let isRoomCreator
-let rtcPeerConnection // Connection between the local device and the remote peer.
-let roomId
-
-// Free public STUN servers provided by Google.
-const iceServers = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    { urls: 'stun:stun2.l.google.com:19302' },
-    { urls: 'stun:stun3.l.google.com:19302' },
-    { urls: 'stun:stun4.l.google.com:19302' },
-  ],
-}
-
 connectButton.addEventListener('click', () => {
   joinRoom(roomInput.value)
 })
 
-// SOCKET EVENT CALLBACKS =====================================================
+/**
+ * Event handler for the 'room_created' event.
+ * It is triggered when a room is created on the server.
+ * Sets the local stream and sets isRoomCreator to true.
+ */
 socket.on('room_created', async () => {
   console.log('Socket event callback: room_created')
 
@@ -56,6 +18,11 @@ socket.on('room_created', async () => {
   isRoomCreator = true
 })
 
+/**
+ * Event handler for the 'room_joined' event.
+ * It is triggered when a client joins a room on the server.
+ * Sets the local stream and emits the 'start_call' event with the roomId.
+ */
 socket.on('room_joined', async () => {
   console.log('Socket event callback: room_joined')
 
@@ -63,13 +30,23 @@ socket.on('room_joined', async () => {
   socket.emit('start_call', roomId)
 })
 
+/**
+ * Event handler for the 'full_room' event.
+ * It is triggered when a room is full and cannot accept more clients.
+ * Displays an alert message to the user.
+ */
 socket.on('full_room', () => {
   console.log('Socket event callback: full_room')
 
   alert('The room is full, please try another one')
 })
 
-// socket listener for the start_call event
+/**
+ * Event handler for the 'start_call' event.
+ * It is triggered when the call is started by the room creator.
+ * Creates a new RTCPeerConnection, adds local tracks, sets the ontrack and onicecandidate handlers,
+ * and creates an offer to send to the other client.
+ */
 socket.on('start_call', async () => {
   console.log('Socket event callback: start_call')
 
@@ -82,6 +59,13 @@ socket.on('start_call', async () => {
   }
 })
 
+/**
+ * Event handler for the 'webrtc_offer' event.
+ * It is triggered when an offer is received from the room creator.
+ * Creates a new RTCPeerConnection, adds local tracks, sets the ontrack and onicecandidate handlers,
+ * sets the remote description, and creates an answer to send back.
+ * @param {object} event - The event object containing the offer.
+ */
 socket.on('webrtc_offer', async (event) => {
   console.log('Socket event callback: webrtc_offer ', event)
 
@@ -90,22 +74,32 @@ socket.on('webrtc_offer', async (event) => {
     addLocalTracks(rtcPeerConnection)
     rtcPeerConnection.ontrack = setRemoteStream
     rtcPeerConnection.onicecandidate = sendIceCandidate
-    //here we are setting the remote peer session description media types,session timing,codec etc
     rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event))
     await createAnswer(rtcPeerConnection)
   }
 })
 
+/**
+ * Event handler for the 'webrtc_answer' event.
+ * It is triggered when an answer is received from the client joining the room.
+ * Sets the remote description.
+ * @param {object} event - The event object containing the answer.
+ */
 socket.on('webrtc_answer', (event) => {
   console.log('Socket event callback: webrtc_answer ', event)
 
   rtcPeerConnection.setRemoteDescription(new RTCSessionDescription(event))
 })
 
+/**
+ * Event handler for the 'webrtc_ice_candidate' event.
+ * It is triggered when an ICE candidate is received from the other client.
+ * Adds the ICE candidate to the RTCPeerConnection.
+ * @param {object} event - The event object containing the ICE candidate.
+ */
 socket.on('webrtc_ice_candidate', (event) => {
   console.log('Socket event callback: webrtc_ice_candidate ', event)
 
-  // ICE candidate configuration.
   const candidate = new RTCIceCandidate({
     sdpMLineIndex: event.label,
     candidate: event.candidate,
@@ -113,8 +107,11 @@ socket.on('webrtc_ice_candidate', (event) => {
   rtcPeerConnection.addIceCandidate(candidate)
 })
 
-//socket listener for the disconnect event
-
+/**
+ * Event handler for the 'disconnect' event.
+ * It is triggered when the socket connection is disconnected.
+ * Stops the local or remote video tracks and disconnects the socket.
+ */
 socket.on('disconnect', () => {
   console.log('socket disconnected')
   if (isRoomCreator) {
@@ -129,7 +126,11 @@ socket.on('disconnect', () => {
   socket.disconnect()
 })
 
-// FUNCTIONS ==================================================================
+/**
+ * Joins the specified room and triggers the showVideo function.
+ * Displays an alert if the room ID is empty.
+ * @param {string} room - The room ID to join.
+ */
 function joinRoom(room) {
   if (room === '') {
     alert('Please type a room ID')
@@ -140,11 +141,19 @@ function joinRoom(room) {
   }
 }
 
+/**
+ * Shows the video chat container and hides the room selection container.
+ */
 function showVideo() {
   roomSelectionContainer.style.display = 'none'
   videoChatContainer.style.display = 'block'
 }
 
+/**
+ * Creates an offer and sets it as the local description of the RTCPeerConnection.
+ * Emits the 'webrtc_offer' event with the offer and the roomId.
+ * @param {RTCPeerConnection} rtcPeerConnection - The RTCPeerConnection object.
+ */
 async function createOffer(rtcPeerConnection) {
   try {
     const sessionDescription = await rtcPeerConnection.createOffer()
@@ -160,6 +169,11 @@ async function createOffer(rtcPeerConnection) {
   }
 }
 
+/**
+ * Creates an answer and sets it as the local description of the RTCPeerConnection.
+ * Emits the 'webrtc_answer' event with the answer and the roomId.
+ * @param {RTCPeerConnection} rtcPeerConnection - The RTCPeerConnection object.
+ */
 async function createAnswer(rtcPeerConnection) {
   try {
     const sessionDescription = await rtcPeerConnection.createAnswer()
@@ -175,7 +189,10 @@ async function createAnswer(rtcPeerConnection) {
   }
 }
 
-//it will allow local peer to access its media devices and show it to him
+/**
+ * Sets the local media stream to the localVideoComponent.
+ * @param {MediaStreamConstraints} mediaConstraints - The media constraints for the getUserMedia API.
+ */
 async function setLocalStream(mediaConstraints) {
   try {
     localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints)
@@ -185,20 +202,29 @@ async function setLocalStream(mediaConstraints) {
   }
 }
 
-//using rtcpeerConnection to send local peer media tracks to remote peer
+/**
+ * Adds the local tracks from the localStream to the RTCPeerConnection.
+ * @param {RTCPeerConnection} rtcPeerConnection - The RTCPeerConnection object.
+ */
 function addLocalTracks(rtcPeerConnection) {
   localStream.getTracks().forEach((track) => {
     rtcPeerConnection.addTrack(track, localStream)
   })
 }
 
-//used for receiving the stream from other peer
+/**
+ * Sets the remote media stream to the remoteVideoComponent.
+ * @param {RTCTrackEvent} event - The RTCTrackEvent object containing the remote stream.
+ */
 function setRemoteStream(event) {
   remoteVideoComponent.srcObject = event.streams[0]
   remoteStream = event.stream
 }
 
-//function wiil be triggered when it receives local peer ICE candidates or when the local peer gathers a new ICE candidate.
+/**
+ * Sends the ICE candidate to the other client.
+ * @param {RTCPeerConnectionIceEvent} event - The RTCPeerConnectionIceEvent object containing the ICE candidate.
+ */
 function sendIceCandidate(event) {
   if (event.candidate) {
     console.log('ICE candidate is ', event.candidate, event.candidate.sdpMLineIndex)
